@@ -1,0 +1,123 @@
+DROP TABLE IF EXISTS Student cascade;
+DROP TABLE IF EXISTS GradeLevel cascade;
+DROP TABLE IF EXISTS Gender cascade;
+DROP TABLE IF EXISTS Teacher cascade;
+DROP TABLE IF EXISTS Specialization cascade;
+DROP TABLE IF EXISTS Class cascade;
+DROP TABLE IF EXISTS TeacherSpecialization cascade;
+DROP TABLE IF EXISTS ClassAssignment cascade;
+DROP TABLE IF EXISTS StudentClass cascade;
+
+CREATE TABLE GradeLevel(
+	id SERIAL PRIMARY KEY NOT NULL,
+	gradeNumber INT NOT NULL
+);
+
+CREATE TABLE Gender(
+	id SERIAL PRIMARY KEY NOT NULL,
+	type VARCHAR(250) NOT NULL
+);
+
+CREATE TABLE Teacher(
+	id SERIAL PRIMARY KEY NOT NULL,
+	name VARCHAR(250) NOT NULL
+);
+
+CREATE TABLE Specialization(
+	id SERIAL PRIMARY KEY NOT NULL,
+	name VARCHAR(250) NOT NULL
+);
+
+CREATE TABLE Class(
+	id SERIAL PRIMARY KEY NOT NULL,
+	gradeLevelId INT NOT NULL,
+	specializationId INT NOT NULL,
+	CONSTRAINT fk_Class_GradeLevel
+			FOREIGN KEY(gradeLevelId) 
+			REFERENCES GradeLevel(id),
+	CONSTRAINT fk_Class_Specialization
+			FOREIGN KEY(specializationId) 
+			REFERENCES Specialization(id)
+);
+
+
+
+CREATE TABLE TeacherSpecialization(
+	teacherId INT NOT NULL,
+	specializationId INT NOT NULL,
+	PRIMARY KEY (teacherId, specializationId),
+	CONSTRAINT fk_TeacherSpecialization_Teacher
+			FOREIGN KEY(teacherId) 
+			REFERENCES Teacher(id),
+	CONSTRAINT fk_TeacherSpecialization_Specialization
+			FOREIGN KEY(specializationId) 
+			REFERENCES Specialization(id)
+);
+
+CREATE TABLE Student(
+	id SERIAL PRIMARY KEY NOT NULL,
+	firstName VARCHAR(250) NOT NULL,
+	lastName VARCHAR(250) NOT NULL,
+	birthDay DATE NOT NULL,
+	gradeId INT NOT NULL,
+	genderId INT NOT NULL,
+	CONSTRAINT fk_Student_GradeLevel
+			FOREIGN KEY(gradeId) 
+			REFERENCES GradeLevel(id),
+	CONSTRAINT fk_Student_Gender
+			FOREIGN KEY(genderId) 
+			REFERENCES Gender(id)
+);
+
+CREATE TABLE ClassAssignment(
+	id SERIAL PRIMARY KEY NOT NULL,
+	room INT NOT NULL,
+	day VARCHAR(250) NOT NULL,
+	time TIME NOT NULL,
+	teacherId INT NOT NULL,
+	classId INT NOT NULL,
+	CONSTRAINT fk_ClassAssignment_Teacher
+			FOREIGN KEY(teacherId) 
+			REFERENCES Teacher(id),
+	CONSTRAINT fk_ClassAssignment_Class
+			FOREIGN KEY(classId) 
+			REFERENCES Class(id),
+	CONSTRAINT day_check
+		CHECK (day IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'))
+);
+
+CREATE TABLE StudentClass(
+	studentId INT NOT NULL,
+	classAssignmentId INT NOT NULL,
+	PRIMARY KEY(studentId, classAssignmentId),
+	CONSTRAINT fk_StudentClass_Student
+			FOREIGN KEY(studentId) 
+			REFERENCES Student(id),
+	CONSTRAINT fk_StudentClass_ClassAssignment
+			FOREIGN KEY(classAssignmentId) 
+			REFERENCES ClassAssignment(id)
+);
+
+DROP FUNCTION IF EXISTS checkValidClassAssignment() cascade;
+CREATE FUNCTION checkValidClassAssignment() RETURNS trigger
+	LANGUAGE plpgsql
+	AS $$BEGIN
+	IF (NOT EXISTS (SELECT TS.specializationId 
+					FROM TeacherSpecialization AS TS 
+					WHERE TS.specializationId = (
+						SELECT specializationId FROM Class WHERE id = NEW.classId
+					) 
+					AND TS.teacherId = NEW.teacherId
+		))
+	THEN
+		RAISE EXCEPTION 'This teacher cannot teach this specialization';
+	END IF;
+	RETURN NEW;
+END;$$;
+
+
+CREATE TRIGGER ValidClassAssignment
+BEFORE INSERT ON ClassAssignment
+FOR EACH ROW EXECUTE PROCEDURE checkValidClassAssignment();
+
+
